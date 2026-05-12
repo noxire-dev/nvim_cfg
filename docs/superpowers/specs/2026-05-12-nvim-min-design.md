@@ -1,44 +1,46 @@
 # nvim-min: Minimal, Primeagen-style Neovim Config
 
-**Date:** 2026-05-12
+**Date:** 2026-05-12 (revised same day to switch from parallel install to in-place replacement)
 **Author:** fatih (noxire)
 **Status:** Draft → pending implementation
 
 ## Goal
 
-Build a second Neovim config at `~/AppData/Local/nvim-min` (Windows path: `C:\Users\noxire\AppData\Local\nvim-min`) that has a hand-rolled, "rough" feel inspired by ThePrimeagen's `init.lua` ([github.com/ThePrimeagen/init.lua](https://github.com/ThePrimeagen/init.lua)). Run it via `NVIM_APPNAME=nvim-min nvim`, aliased to `mvim`.
+Replace the existing Neovim config at `~/AppData/Local/nvim` (Windows path: `C:\Users\noxire\AppData\Local\nvim`) with a hand-rolled, "rough" feel inspired by ThePrimeagen's `init.lua` ([github.com/ThePrimeagen/init.lua](https://github.com/ThePrimeagen/init.lua)). Run it via the normal `nvim` command — no `NVIM_APPNAME`, no shell alias.
 
-Keep the existing config at `~/AppData/Local/nvim` untouched.
+The existing kickstart-derived config is preserved by:
+1. Committing all uncommitted changes (currently `lua/config/`, `lua/plugins/`, modified `init.lua`, etc.) and pushing to the `noxire-dev/nvim_cfg` GitHub remote.
+2. Renaming `nvim/` → `nvim.bak/` locally before building the new one. This gives an instant rollback path. User deletes `nvim.bak/` manually once satisfied.
 
 ## Why
 
 - Day-to-day editor split: nvim for small/quick stuff (configs, single-file edits, remote SSH), Zed for full IDE work.
-- Current config is kickstart-derived with heavy UI sugar (snacks suite, mini suite, which-key, blink.cmp, fidget, todo-comments, ufo, etc.). User wants to test a leaner config without losing the current one.
-- Parallel install via `NVIM_APPNAME` is the lowest-risk path: zero changes to existing config, easy A/B, easy revert (just `rm -rf nvim-min`).
+- Current config is kickstart-derived with heavy UI sugar (snacks suite, mini suite, which-key, blink.cmp, fidget, todo-comments, ufo, etc.). User wants a leaner config.
+- In-place replacement chosen over parallel install: user prefers `nvim` to launch the new config directly (no alias to remember). Safety comes from the git snapshot + local `nvim.bak/` rename rather than a parallel install path.
 
 ## Non-goals
 
-- Not deleting or migrating the current `nvim` config.
 - Not building feature parity with Zed.
 - Not optimizing for absolute plugin minimum — LSP and completion stay in.
+- Not permanently deleting the existing config — it's preserved on the GitHub remote and as a local `nvim.bak/` directory.
 
 ## Scope decisions (locked)
 
 | Question | Decision |
 |---|---|
-| Fresh vs trim vs parallel | **Parallel** at `nvim-min` |
+| Fresh vs trim vs parallel vs replace | **In-place replace** at `~/AppData/Local/nvim`, after snapshotting old config to remote + local `nvim.bak/` |
 | LSP in this config? | **Yes** — mason + lspconfig + nvim-cmp + conform |
 | File picker | **telescope.nvim** (not snacks, not fzf-lua) |
 | Colorschemes | **rose-pine** (default) + **tokyonight** + **kanagawa** — switchable |
 | AI completion | **copilot.lua**, lazy-loaded via `cmd = "Copilot"`, disabled by default |
 | Keep from current | **which-key**, **zen-mode** |
-| Shell alias | `mvim` (PowerShell function setting `$env:NVIM_APPNAME`) |
-| Namespace | `mvim` — both lua module path and shell alias |
+| Shell alias | None — launch with plain `nvim` |
+| Lua namespace | `mvim` (for `lua/mvim/...` module paths) |
 
 ## Directory structure
 
 ```
-C:\Users\noxire\AppData\Local\nvim-min\
+C:\Users\noxire\AppData\Local\nvim\
 ├── init.lua                    # 3-line require chain
 ├── lua\
 │   └── mvim\
@@ -166,29 +168,34 @@ Each `lua/mvim/lazy/*.lua` returns a single lazy.nvim spec table or a list of th
 
 - **`whichkey.lua`** — minimal: `delay = 0`, no icons fluff, group labels for `<leader>p` (project), `<leader>v` (vim/lsp), `<leader>t` (toggle), `<leader>g` (git), `<leader>h` (hunk).
 
-## Shell alias setup
+## Pre-build steps (must complete before any new files are written)
 
-Append to PowerShell `$PROFILE` (`Microsoft.PowerShell_profile.ps1`):
+1. **Snapshot uncommitted state.** In the existing `nvim/` repo:
+   ```
+   git add -A
+   git commit -m "snapshot before nvim-min migration"
+   git push origin master
+   ```
+   Verify `git status` is clean and the remote shows the new commit. This MUST succeed before continuing — if push fails (auth, network, conflict), stop and resolve before touching the directory.
 
-```powershell
-function mvim {
-    $env:NVIM_APPNAME = 'nvim-min'
-    nvim @args
-}
-```
+2. **Rename old directory.** From `C:\Users\noxire\AppData\Local\`:
+   ```
+   Move-Item nvim nvim.bak
+   ```
+   The git history (including the freshly pushed snapshot) travels with the directory; the user can `cd nvim.bak` to recover anything.
 
-`Set-Alias` cannot be used because we need to set an env var first; a function is required.
+3. **Create fresh `nvim/` directory.** Empty, ready for the new layout above.
 
 ## Verification / acceptance criteria
 
-- `mvim` launches Neovim with no errors on `:checkhealth`.
+- Plain `nvim` (no env var, no alias) launches the new config with no errors on `:checkhealth`.
 - `<leader>pf` opens telescope find_files in the cwd.
 - `:Telescope colorscheme` shows rose-pine, tokyonight, kanagawa selectable with live preview.
 - Opening a `.go` file: `gopls` attaches (`:LspInfo` confirms), `gd` jumps to definition, save triggers gofumpt+goimports.
 - Opening a `.py` file: `pyright` + `ruff` both attach, save triggers ruff format.
 - `:Copilot` is available; `:Copilot status` reports disabled until user runs `:Copilot enable`.
 - `<leader>tz` toggles zen-mode and centers the buffer.
-- Original `nvim` config (without `NVIM_APPNAME` set) opens unchanged.
+- `C:\Users\noxire\AppData\Local\nvim.bak\` still exists with old config + new "snapshot" commit pushed to `noxire-dev/nvim_cfg` on GitHub.
 
 ## Risks / known unknowns
 
@@ -207,13 +214,13 @@ function mvim {
 
 ## Implementation order (rough)
 
-1. PowerShell `$PROFILE` alias.
-2. Create `nvim-min` directory structure.
-3. `init.lua`, `set.lua`, `remap.lua`, `lazy_init.lua` — verify `mvim` launches with zero plugins installed.
-4. Add colorschemes spec — verify `:colorscheme rose-pine` works.
-5. Add telescope + treesitter — verify `<leader>pf` works.
-6. Add LSP spec — verify gopls / pyright / ts_ls attach.
-7. Add conform — verify format on save.
-8. Add harpoon, undotree, gitsigns, fugitive, zen-mode, which-key — verify keymaps.
-9. Add copilot last (no activation).
-10. Final acceptance pass against the checklist above.
+1. **Pre-build:** snapshot + push old config, then rename `nvim/` → `nvim.bak/`, then create empty `nvim/`. Verify push success before destructive rename.
+2. `init.lua`, `set.lua`, `remap.lua`, `lazy_init.lua` — verify plain `nvim` launches with zero plugins installed.
+3. Add colorschemes spec — verify `:colorscheme rose-pine` works.
+4. Add telescope + treesitter — verify `<leader>pf` works.
+5. Add LSP spec — verify gopls / pyright / ts_ls attach.
+6. Add conform — verify format on save.
+7. Add harpoon, undotree, gitsigns, fugitive, zen-mode, which-key — verify keymaps.
+8. Add copilot last (no activation).
+9. Final acceptance pass against the checklist above.
+10. Initialize fresh git repo in new `nvim/` and push to the same `noxire-dev/nvim_cfg` remote (probably as a new branch `nvim-min` or by force-pushing master after user explicitly approves — defer this decision to implementation).
